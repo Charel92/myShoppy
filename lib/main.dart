@@ -4,7 +4,7 @@ void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-  static const String _title = 'Flutter Stateful Clicker Counter';
+  static const String _title = 'myShoppy';
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
@@ -30,6 +30,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
+  List<String> _items = [];
 
   void _incrementCounter() {
     setState(() {
