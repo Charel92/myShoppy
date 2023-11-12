@@ -1,91 +1,174 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
+import 'package:firedart/firedart.dart';
 
-void main() => runApp(const MyApp());
+const apiKey = 'AIzaSyBFmAjLXBZRaCh9Ns3nb9gFsgntIZFPBqM';
+const projectId = 'my-shoppy-cirrt';
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-  static const String _title = 'myShoppy';
-  // This widget is the root of your application.
+void main() {
+  Firestore.initialize(projectId);
+  runApp(ShoppingListApp());
+}
+
+class ShoppingListApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: _title,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(),
+      home: ShoppingList(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-  // This class is the configuration for the state.
+class ShoppingList extends StatefulWidget {
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _ShoppingListState createState() => _ShoppingListState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-  List<String> _items = [];
+class _ShoppingListState extends State<ShoppingList> {
+  final List<String> _items = [];
+  final List<String> _checkedItems = [];
+  late SharedPreferences _preferences;
+  TextEditingController _textEditingController = TextEditingController();
+  String _currentItem = '';
+  CollectionReference groceryCollection =
+      Firestore.instance.collection('articles');
 
-  void _incrementCounter() {
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  _loadItems() async {
+    _preferences = await SharedPreferences.getInstance();
+    final savedItems = _preferences.getStringList('items');
+    if (savedItems != null) {
+      setState(() {
+        _items.addAll(savedItems);
+      });
+    }
+  }
+
+  _saveItems() {
+    _preferences.setStringList('items', _items);
+  }
+
+  void _addItem(String item) {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _items.add(item);
+      _saveItems();
+      _textEditingController.clear();
+    });
+  }
+
+  void _checkItem(String item) {
+    setState(() {
+      _items.remove(item);
+      _checkedItems.add(item);
+      _saveItems();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: const Text('Flutter Demo Click Counter'),
+        title: Text('myShoppy - Shopping List App'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+      body: Column(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: TypeAheadField<String>(
+                    textFieldConfiguration: TextFieldConfiguration(
+                      controller: _textEditingController,
+                      decoration: InputDecoration(labelText: 'Enter an item'),
+                    ),
+                    suggestionsCallback: (pattern) async {
+                      // Return a list of suggestions based on the stored items
+                      return _items
+                          .where((item) => item
+                              .toLowerCase()
+                              .contains(pattern.toLowerCase()))
+                          .toList();
+                    },
+                    itemBuilder: (context, suggestion) {
+                      return ListTile(
+                        title: Text(suggestion),
+                      );
+                    },
+                    onSuggestionSelected: (suggestion) {
+                      _addItem(
+                          suggestion); // Add the selected suggestion to the list
+                      _textEditingController
+                          .clear(); // Clear the text input field
+                    },
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.add),
+                  onPressed: () {
+                    final item = _textEditingController.text.trim();
+                    if (item.isNotEmpty) {
+                      _addItem(item);
+                    }
+                  },
+                ),
+              ],
             ),
-            Text(
-              '$_counter',
-              style: const TextStyle(fontSize: 25),
+          ),
+          Expanded(
+            child: ReorderableListView(
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  if (oldIndex < newIndex) {
+                    newIndex -= 1;
+                  }
+                  final item = _items.removeAt(oldIndex);
+                  _items.insert(newIndex, item);
+                  _saveItems();
+                });
+              },
+              children: _items
+                  .map(
+                    (item) => ListTile(
+                      key: Key(item),
+                      title: Text(item),
+                      onTap: () {
+                        _checkItem(item);
+                      },
+                    ),
+                  )
+                  .toList(),
             ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+          ),
+          Divider(),
+          Text('Checked Items:', style: TextStyle(fontSize: 18)),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _checkedItems.length,
+              itemBuilder: (context, index) {
+                return ListTile(
+                  title: Text(
+                    _checkedItems[index],
+                    style: TextStyle(decoration: TextDecoration.lineThrough),
+                  ),
+                );
+              },
+            ),
+          ),
+          IconButton(
+            onPressed: () async {
+              final groceries = await groceryCollection.get();
+              print(groceries);
+            },
+            icon: Icon(Icons.nature),
+          ),
+        ],
       ),
     );
   }
